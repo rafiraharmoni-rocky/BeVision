@@ -21,6 +21,8 @@
   
   <!-- Marked.js for Markdown parsing -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- PDF.js for client-side PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   
   <!-- Highlight.js for Code Highlighting -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -119,10 +121,14 @@
         <form id="chat-form" class="chat-form-container">
           <!-- Hidden inputs for files -->
           <input type="file" id="image-upload-input" accept="image/*" multiple style="display: none;">
+          <input type="file" id="doc-upload-input" accept=".txt,.pdf,.csv,.json,.md,.js,.ts,.html,.css" multiple style="display: none;">
           
           <div class="input-actions-left">
             <button type="button" id="attach-btn" class="btn btn-icon btn-action" title="Attach Images (Drag & Drop OK)">
               <i data-lucide="image"></i>
+            </button>
+            <button type="button" id="attach-doc-btn" class="btn btn-icon btn-action" title="Attach Documents (.txt, .pdf, .csv, .json, .md)">
+              <i data-lucide="paperclip"></i>
             </button>
           </div>
           

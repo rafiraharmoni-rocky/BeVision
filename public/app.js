@@ -2,6 +2,7 @@
 let chats = [];
 let activeChatId = null;
 let attachedImages = []; // Array of { dataUri, mimeType, name }
+let attachedDocs = []; // Array of { name, content, type }
 let settings = {
   apiUrl: 'https://api.x.ai/v1',
   apiKey: '',
@@ -32,7 +33,9 @@ const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const attachBtn = document.getElementById('attach-btn');
+const attachDocBtn = document.getElementById('attach-doc-btn');
 const imageUploadInput = document.getElementById('image-upload-input');
+const docUploadInput = document.getElementById('doc-upload-input');
 const attachmentPreviewContainer = document.getElementById('attachment-preview-container');
 const statusEndpointDisplay = document.getElementById('status-endpoint-display');
 const tempValDisplay = document.getElementById('temp-val-display');
@@ -471,6 +474,21 @@ function parseMessageContent(content) {
 function appendMessageDOM(role, content) {
   const { text, images } = parseMessageContent(content);
   
+  // Extract clean display text by removing the document context blocks
+  let displayText = text;
+  const docSplitIndex = text.indexOf('\n\n[Dokumen Terlampir:');
+  if (docSplitIndex !== -1) {
+    displayText = text.substring(0, docSplitIndex);
+  }
+
+  // Extract document names for rendering pills
+  const docNames = [];
+  const regex = /\[Dokumen Terlampir:\s*([^\]]+)\]/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    docNames.push(match[1]);
+  }
+
   const messageRow = document.createElement('div');
   messageRow.className = `message-row ${role} message-animated`;
   
@@ -484,17 +502,34 @@ function appendMessageDOM(role, content) {
     attachmentsHtml += `</div>`;
   }
   
+  // Render Document Pills
+  let docsHtml = '';
+  if (docNames.length > 0) {
+    docsHtml = `<div class="message-documents" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; margin-top: 4px;">`;
+    docNames.forEach(name => {
+      const isPdf = name.toLowerCase().endsWith('.pdf');
+      docsHtml += `
+        <div class="message-document-pill" style="display: flex; align-items: center; gap: 6px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 11px; color: var(--text-primary);">
+          <i data-lucide="${isPdf ? 'file-text' : 'file-code'}" style="width: 14px; height: 14px; color: var(--text-secondary);"></i>
+          <span>${escapeHTML(name)}</span>
+        </div>
+      `;
+    });
+    docsHtml += `</div>`;
+  }
+
   // Message Text HTML (using Markdown rendering for assistant, simple escaped or markdown for user)
   let bubbleContentHtml = '';
   if (role === 'assistant') {
-    bubbleContentHtml = renderMathAndMarkdown(text);
+    bubbleContentHtml = renderMathAndMarkdown(displayText);
   } else {
     // Escape HTML for user input, preserve newlines, or render markdown if simple
-    bubbleContentHtml = `<p>${escapeHTML(text).replace(/\n/g, '<br>')}</p>`;
+    bubbleContentHtml = `<p>${escapeHTML(displayText).replace(/\n/g, '<br>')}</p>`;
   }
   
   messageRow.innerHTML = `
     ${attachmentsHtml}
+    ${docsHtml}
     <div class="message-bubble">
       ${bubbleContentHtml}
     </div>
@@ -566,9 +601,61 @@ function handleFiles(files) {
   }
 }
 
+// Handle document upload and client-side extraction (PDF.js for pdfs, FileReader for others)
+async function handleDocumentFiles(files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (attachedDocs.some(doc => doc.name === file.name)) continue;
+    
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    
+    if (fileExtension === 'pdf') {
+      try {
+        const textContent = await extractTextFromPdf(file);
+        attachedDocs.push({
+          name: file.name,
+          content: textContent,
+          type: 'pdf'
+        });
+        renderAttachmentPreviews();
+      } catch (err) {
+        console.error('Error parsing PDF:', err);
+        alert(`Gagal membaca file PDF "${file.name}": ${err.message}`);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        attachedDocs.push({
+          name: file.name,
+          content: e.target.result,
+          type: fileExtension
+        });
+        renderAttachmentPreviews();
+      };
+      reader.readAsText(file);
+    }
+  }
+}
+
+// Extract text content from PDF using PDF.js in the browser
+async function extractTextFromPdf(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map(item => item.str);
+    text += strings.join(' ') + '\n';
+  }
+  return text;
+}
+
 // Render attachment thumbnails above input
 function renderAttachmentPreviews() {
-  if (attachedImages.length === 0) {
+  if (attachedImages.length === 0 && attachedDocs.length === 0) {
     attachmentPreviewContainer.style.display = 'none';
     attachmentPreviewContainer.innerHTML = '';
     return;
@@ -577,20 +664,52 @@ function renderAttachmentPreviews() {
   attachmentPreviewContainer.style.display = 'flex';
   attachmentPreviewContainer.innerHTML = '';
   
+  // Render Images
   attachedImages.forEach((img, index) => {
     const preview = document.createElement('div');
     preview.className = 'attachment-preview';
     preview.innerHTML = `
       <img src="${img.dataUri}" alt="${escapeHTML(img.name)}">
-      <button type="button" class="remove-attachment-btn" onclick="removeAttachment(${index})">×</button>
+      <button type="button" class="remove-attachment-btn" onclick="removeImageAttachment(${index})">×</button>
     `;
     attachmentPreviewContainer.appendChild(preview);
   });
+
+  // Render Documents
+  attachedDocs.forEach((doc, index) => {
+    const preview = document.createElement('div');
+    preview.className = 'attachment-preview doc-preview';
+    preview.style.display = 'flex';
+    preview.style.flexDirection = 'column';
+    preview.style.alignItems = 'center';
+    preview.style.justifyContent = 'center';
+    preview.style.width = '64px';
+    preview.style.height = '64px';
+    preview.style.border = '1px solid var(--border-color)';
+    preview.style.borderRadius = '8px';
+    preview.style.position = 'relative';
+    preview.style.backgroundColor = 'var(--bg-secondary)';
+    preview.style.padding = '4px';
+    
+    const isPdf = doc.type === 'pdf';
+    preview.innerHTML = `
+      <i data-lucide="${isPdf ? 'file-text' : 'file-code'}" style="width: 24px; height: 24px; color: var(--text-secondary);"></i>
+      <span style="font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; color: var(--text-primary);">${escapeHTML(doc.name)}</span>
+      <button type="button" class="remove-attachment-btn" onclick="removeDocAttachment(${index})" style="position: absolute; top: -6px; right: -6px;">×</button>
+    `;
+    attachmentPreviewContainer.appendChild(preview);
+  });
+  
+  lucide.createIcons();
 }
 
-// Remove attached image from preview list
-window.removeAttachment = function(index) {
+window.removeImageAttachment = function(index) {
   attachedImages.splice(index, 1);
+  renderAttachmentPreviews();
+};
+
+window.removeDocAttachment = function(index) {
+  attachedDocs.splice(index, 1);
   renderAttachmentPreviews();
 };
 
@@ -601,10 +720,10 @@ async function handleSendMessage(e) {
   const activeChat = chats.find(c => c.id === activeChatId);
   if (!activeChat) return;
   
-  const textInput = chatInput.value.trim();
+  let textInput = chatInput.value.trim();
   
   // Validate that there is content to send
-  if (!textInput && attachedImages.length === 0) return;
+  if (!textInput && attachedImages.length === 0 && attachedDocs.length === 0) return;
   
   // Validation: API Key must be set
   if (!settings.apiKey) {
@@ -613,6 +732,15 @@ async function handleSendMessage(e) {
     return;
   }
   
+  // Build document context if any
+  if (attachedDocs.length > 0) {
+    let docContext = '';
+    attachedDocs.forEach(doc => {
+      docContext += `\n\n[Dokumen Terlampir: ${doc.name}]\n----------------------------------\n${doc.content}\n----------------------------------`;
+    });
+    textInput = (textInput || 'Analisis dokumen terlampir.') + docContext;
+  }
+
   // Build message structure
   let messageContent;
   if (attachedImages.length > 0) {
@@ -658,6 +786,7 @@ async function handleSendMessage(e) {
   chatInput.value = '';
   chatInput.style.height = 'auto';
   attachedImages = [];
+  attachedDocs = [];
   renderAttachmentPreviews();
   
   // Add temporary assistant typing bubble
@@ -1095,6 +1224,17 @@ function setupEventListeners() {
       handleFiles(e.target.files);
     }
   });
+
+  // Document Upload Trigger Buttons
+  attachDocBtn.addEventListener('click', () => {
+    docUploadInput.click();
+  });
+  
+  docUploadInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      handleDocumentFiles(e.target.files);
+    }
+  });
   
   // Drag & Drop Handlers
   window.addEventListener('dragover', (e) => {
@@ -1103,8 +1243,19 @@ function setupEventListeners() {
   
   window.addEventListener('drop', (e) => {
     e.preventDefault();
-    if (e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const images = [];
+      const docs = [];
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].type.startsWith('image/')) {
+          images.push(files[i]);
+        } else {
+          docs.push(files[i]);
+        }
+      }
+      if (images.length > 0) handleFiles(images);
+      if (docs.length > 0) handleDocumentFiles(docs);
     }
   });
   
