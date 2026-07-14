@@ -23,6 +23,18 @@ const settingsModal = document.getElementById('settings-modal');
 const settingsCloseBtn = document.getElementById('settings-close-btn');
 const settingsCancelBtn = document.getElementById('settings-cancel-btn');
 const settingsSaveBtn = document.getElementById('settings-save-btn');
+
+const libraryToggleBtn = document.getElementById('library-toggle-btn');
+const libraryModal = document.getElementById('library-modal');
+const libraryCloseBtn = document.getElementById('library-close-btn');
+const librarySearchInput = document.getElementById('library-search-input');
+const libraryListContainer = document.getElementById('library-list-container');
+const libraryClearBtn = document.getElementById('library-clear-btn');
+const libraryOkBtn = document.getElementById('library-ok-btn');
+
+const previewDrawer = document.getElementById('preview-drawer');
+const previewCloseBtn = document.getElementById('preview-close-btn');
+const previewIframe = document.getElementById('preview-iframe');
 const clearChatBtn = document.getElementById('clear-chat-btn');
 const activeChatTitle = document.getElementById('active-chat-title');
 const activeModelDisplay = document.getElementById('active-model-display');
@@ -197,6 +209,7 @@ window.copyToClipboard = function(codeId) {
 function init() {
   loadSettings();
   loadChats();
+  loadSnippets();
   setupEventListeners();
   updateStatusDisplays();
   lucide.createIcons();
@@ -551,6 +564,7 @@ function appendMessageDOM(role, content) {
   if (role === 'assistant') {
     addTableExportButtons(messageRow);
   }
+  addCodeBlockControls(messageRow);
   lucide.createIcons();
 }
 
@@ -1158,6 +1172,38 @@ function setupEventListeners() {
   settingsCancelBtn.addEventListener('click', () => {
     settingsModal.style.display = 'none';
   });
+
+  // Snippet Library Modal events
+  libraryToggleBtn.addEventListener('click', () => {
+    libraryModal.style.display = 'flex';
+    renderSnippetsList();
+  });
+
+  libraryCloseBtn.addEventListener('click', () => {
+    libraryModal.style.display = 'none';
+  });
+
+  libraryOkBtn.addEventListener('click', () => {
+    libraryModal.style.display = 'none';
+  });
+
+  librarySearchInput.addEventListener('input', (e) => {
+    renderSnippetsList(e.target.value);
+  });
+
+  libraryClearBtn.addEventListener('click', () => {
+    if (confirm('Apakah Anda yakin ingin menghapus seluruh snippet kode di Pustaka?')) {
+      savedSnippets = [];
+      localStorage.setItem('bebaavision_snippets', JSON.stringify(savedSnippets));
+      renderSnippetsList();
+    }
+  });
+
+  // Preview Drawer events
+  previewCloseBtn.addEventListener('click', () => {
+    previewDrawer.style.display = 'none';
+    previewIframe.srcdoc = '';
+  });
   
   settingsSaveBtn.addEventListener('click', () => {
     const apiUrl = document.getElementById('settings-api-url').value.trim();
@@ -1492,3 +1538,245 @@ window.exportMessageWord = function(btnElement) {
   link.click();
   document.body.removeChild(link);
 };
+
+// Add interactive header controls to Markdown Code blocks (Copy, Save, Preview)
+function addCodeBlockControls(bubbleElement) {
+  const preElements = bubbleElement.querySelectorAll('pre');
+  preElements.forEach((pre, index) => {
+    if (pre.parentElement.classList.contains('code-block-wrapper')) return;
+    
+    const code = pre.querySelector('code');
+    if (!code) return;
+    
+    let language = 'text';
+    const classList = Array.from(code.classList);
+    const langClass = classList.find(c => c.startsWith('language-') || c.startsWith('lang-'));
+    if (langClass) {
+      language = langClass.replace('language-', '').replace('lang-', '');
+    }
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper';
+    
+    pre.parentNode.insertBefore(wrapper, pre);
+    
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+    
+    const isInteractive = ['html', 'xml', 'svg', 'css', 'javascript', 'js'].includes(language.toLowerCase());
+    
+    header.innerHTML = `
+      <span class="code-block-title">${language}</span>
+      <div class="code-block-actions">
+        <button type="button" class="code-block-btn copy-code-btn">
+          <i data-lucide="copy" style="width: 12px; height: 12px;"></i> Salin
+        </button>
+        <button type="button" class="code-block-btn save-code-btn">
+          <i data-lucide="save" style="width: 12px; height: 12px;"></i> Simpan
+        </button>
+        ${isInteractive ? `
+        <button type="button" class="code-block-btn run-code-btn" style="color: var(--accent-color); font-weight: 600;">
+          <i data-lucide="play" style="width: 12px; height: 12px;"></i> Preview
+        </button>` : ''}
+      </div>
+    `;
+    
+    wrapper.appendChild(header);
+    wrapper.appendChild(pre);
+    
+    const copyBtn = header.querySelector('.copy-code-btn');
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(code.innerText).then(() => {
+        const originalHTML = copyBtn.innerHTML;
+        copyBtn.innerHTML = `<i data-lucide="check" style="width: 12px; height: 12px;"></i> Tersalin`;
+        lucide.createIcons();
+        setTimeout(() => {
+          copyBtn.innerHTML = originalHTML;
+          lucide.createIcons();
+        }, 2000);
+      });
+    };
+    
+    const saveBtn = header.querySelector('.save-code-btn');
+    saveBtn.onclick = () => {
+      saveSnippetToLibrary(language, code.innerText);
+    };
+    
+    const runBtn = header.querySelector('.run-code-btn');
+    if (runBtn) {
+      runBtn.onclick = () => {
+        runCodePreview(language, code.innerText);
+      };
+    }
+  });
+  lucide.createIcons();
+}
+
+// Render dynamic sandboxed sandbox inside iframe (Artifact preview drawer)
+function runCodePreview(language, code) {
+  const drawer = document.getElementById('preview-drawer');
+  const iframe = document.getElementById('preview-iframe');
+  
+  drawer.style.display = 'flex';
+  
+  let htmlContent = '';
+  const lang = language.toLowerCase();
+  
+  if (lang === 'html') {
+    htmlContent = code;
+  } else if (lang === 'svg' || lang === 'xml') {
+    htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
+          svg { max-width: 90%; max-height: 90%; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.1)); }
+        </style>
+      </head>
+      <body>
+        ${code}
+      </body>
+      </html>
+    `;
+  } else if (lang === 'css') {
+    htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head><style>${code}</style></head>
+      <body>
+        <div style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif; color:#444;">
+          <div style="text-align:center;">
+            <h1>CSS Berhasil Dirender!</h1>
+            <p>Aturan style CSS Anda telah diterapkan ke dokumen ini.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  } else if (lang === 'javascript' || lang === 'js') {
+    htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: monospace; padding: 16px; background: #1e1e1e; color: #abb2bf; line-height: 1.4; }
+          .log-item { margin-bottom: 4px; border-bottom: 1px solid #2c313c; padding-bottom: 4px; }
+          .error { color: #e06c75; }
+        </style>
+      </head>
+      <body>
+        <div id="output"></div>
+        <script>
+          const outputDiv = document.getElementById('output');
+          const oldLog = console.log;
+          console.log = (...args) => {
+            const item = document.createElement('div');
+            item.className = 'log-item';
+            item.innerText = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+            outputDiv.appendChild(item);
+            oldLog(...args);
+          };
+          try {
+            ${code}
+          } catch(err) {
+            const item = document.createElement('div');
+            item.className = 'log-item error';
+            item.innerText = 'Error: ' + err.message;
+            outputDiv.appendChild(item);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+  }
+  
+  iframe.srcdoc = htmlContent;
+}
+
+// Snippet Library logic
+let savedSnippets = [];
+
+function loadSnippets() {
+  const stored = localStorage.getItem('bebaavision_snippets');
+  if (stored) {
+    try {
+      savedSnippets = JSON.parse(stored);
+    } catch (e) {
+      console.error('Error loading snippets', e);
+    }
+  }
+}
+
+function saveSnippetToLibrary(language, code) {
+  const title = prompt("Masukkan judul untuk snippet kode ini:", `Snippet ${language}`);
+  if (title === null) return;
+  
+  const cleanTitle = title.trim() || `Snippet ${language}`;
+  
+  savedSnippets.push({
+    id: 'snip_' + Date.now(),
+    title: cleanTitle,
+    language: language,
+    code: code,
+    timestamp: new Date().toLocaleDateString()
+  });
+  
+  localStorage.setItem('bebaavision_snippets', JSON.stringify(savedSnippets));
+  alert(`Snippet "${cleanTitle}" berhasil disimpan ke Pustaka.`);
+}
+
+function renderSnippetsList(filter = '') {
+  const container = document.getElementById('library-list-container');
+  container.innerHTML = '';
+  
+  const filtered = savedSnippets.filter(snip => 
+    snip.title.toLowerCase().includes(filter.toLowerCase()) || 
+    snip.language.toLowerCase().includes(filter.toLowerCase())
+  );
+  
+  if (filtered.length === 0) {
+    container.innerHTML = `<p style="text-align: center; color: var(--text-secondary); font-size: 13px; margin: 24px 0;">Tidak ada snippet kode yang cocok.</p>`;
+    return;
+  }
+  
+  filtered.forEach(snip => {
+    const item = document.createElement('div');
+    item.className = 'snippet-item';
+    item.innerHTML = `
+      <div class="snippet-item-header">
+        <div>
+          <span class="snippet-item-title">${escapeHTML(snip.title)}</span>
+          <span class="snippet-item-meta" style="margin-left: 8px;">${escapeHTML(snip.language)}</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-icon btn-small copy-snip-btn" title="Salin Kode" data-id="${snip.id}" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary);">
+            <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button class="btn btn-icon btn-small delete-snip-btn" title="Hapus Snippet" data-id="${snip.id}" style="background: transparent; border: none; cursor: pointer; color: var(--error-color);">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+          </button>
+        </div>
+      </div>
+      <pre style="margin: 0; padding: 8px; border-radius: 4px; font-size: 11px; max-height: 120px; overflow-y: auto; background: var(--bg-primary); border: 1px solid var(--border-color);"><code style="font-family: var(--font-mono);">${escapeHTML(snip.code)}</code></pre>
+    `;
+    
+    item.querySelector('.copy-snip-btn').onclick = function() {
+      navigator.clipboard.writeText(snip.code).then(() => {
+        alert('Snippet kode berhasil disalin ke clipboard!');
+      });
+    };
+    
+    item.querySelector('.delete-snip-btn').onclick = function() {
+      if (confirm(`Apakah Anda yakin ingin menghapus snippet "${snip.title}"?`)) {
+        savedSnippets = savedSnippets.filter(s => s.id !== snip.id);
+        localStorage.setItem('bebaavision_snippets', JSON.stringify(savedSnippets));
+        renderSnippetsList(filter);
+      }
+    };
+    
+    container.appendChild(item);
+  });
+  
+  lucide.createIcons();
+}

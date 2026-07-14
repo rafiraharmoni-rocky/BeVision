@@ -55,6 +55,10 @@
       </div>
       
       <div class="sidebar-footer">
+        <button id="library-toggle-btn" class="btn btn-secondary btn-full" style="margin-bottom: 8px;">
+          <i data-lucide="folder-code"></i>
+          <span>Pustaka Snippet</span>
+        </button>
         <button id="settings-toggle-btn" class="btn btn-secondary btn-full">
           <i data-lucide="settings"></i>
           <span>Pengaturan API</span>
@@ -148,6 +152,22 @@
       </footer>
     </main>
 
+    <!-- Live Preview Drawer (Artifacts) -->
+    <div class="preview-drawer" id="preview-drawer" style="display: none;">
+      <div class="drawer-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <i data-lucide="play" style="width: 18px; height: 18px; color: var(--accent-color);"></i>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Live Preview</h3>
+        </div>
+        <button id="preview-close-btn" class="btn btn-icon" style="padding: 4px;">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="drawer-body">
+        <iframe id="preview-iframe"></iframe>
+      </div>
+    </div>
+
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settings-modal" style="display: none;">
       <div class="modal-card">
@@ -214,6 +234,31 @@
         <div class="modal-footer">
           <button id="settings-cancel-btn" class="btn btn-secondary">Batal</button>
           <button id="settings-save-btn" class="btn btn-primary">Simpan Konfigurasi</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Snippet Library Modal -->
+    <div class="modal-overlay" id="library-modal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Pustaka Snippet Kode</h3>
+          <button id="library-close-btn" class="btn btn-icon">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
+          <div class="form-group">
+            <input type="text" id="library-search-input" placeholder="Cari snippet berdasarkan judul atau bahasa..." style="width: 100%; margin-bottom: 12px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+          </div>
+          <div id="library-list-container">
+            <!-- Dynamically populated -->
+            <p style="text-align: center; color: var(--text-secondary); font-size: 13px; margin: 24px 0;">Belum ada snippet kode yang disimpan.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="library-clear-btn" class="btn btn-secondary" style="color: var(--error-color);">Hapus Semua</button>
+          <button id="library-ok-btn" class="btn btn-primary">Selesai</button>
         </div>
       </div>
     </div>
