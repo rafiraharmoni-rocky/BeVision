@@ -1004,9 +1004,13 @@ async function handleSendMessage(e) {
     console.error('Send Error:', error);
     
     // Show error message bubble
+    let errorDetails = `⚠️ **Gagal mengirim pesan.**\n\nDetail Kesalahan: \`${error.message}\`\n\nSilakan periksa API Key, Base URL, dan koneksi internet Anda di menu Pengaturan.`;
+    if (error.message.includes('504') || error.message.includes('502') || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('failed')) {
+      errorDetails += `\n\n💡 **Tips:** Terjadi batas waktu koneksi (timeout/fetch failed). Jika Anda menggunakan OpenRouter, Gemini, atau local 9Router, harap aktifkan/centang opsi **Bypass Proxy (Koneksi Langsung)** di menu Settings agar koneksi menjadi instan dan stabil.`;
+    }
     const errorMsg = {
       role: 'assistant',
-      content: `⚠️ **Gagal mengirim pesan.**\n\nDetail Kesalahan: \`${error.message}\`\n\nSilakan periksa API Key, Base URL, dan koneksi internet Anda di menu Pengaturan.`,
+      content: errorDetails,
       timestamp: new Date().toLocaleTimeString()
     };
     appendMessageDOM('assistant', errorMsg.content);
