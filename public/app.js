@@ -698,7 +698,8 @@ async function handleSendMessage(e) {
     
     let targetUrl = settings.apiUrl;
     const isGemini = settings.apiUrl.includes('generativelanguage.googleapis.com');
-    if (!isGemini) {
+    const isAnthropic = settings.apiUrl.includes('api.anthropic.com');
+    if (!isGemini && !isAnthropic) {
       const hasPath = settings.apiUrl.includes('/chat/completions') || 
                       settings.apiUrl.includes('/generateContent') || 
                       settings.apiUrl.includes('/v1/chat') || 
@@ -724,6 +725,26 @@ async function handleSendMessage(e) {
         }
         targetUrl = `https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${settings.apiKey}&alt=sse`;
         finalBody = JSON.stringify(convertOpenAiToGemini(payload));
+      } else if (isAnthropic) {
+        targetUrl = 'https://api.anthropic.com/v1/messages';
+        finalHeaders = {
+          'Content-Type': 'application/json',
+          'x-api-key': settings.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        };
+        const systemMessage = (payload.messages || []).find(m => m.role === 'system');
+        const otherMessages = (payload.messages || []).filter(m => m.role !== 'system');
+        const anthropicBody = {
+          model: payload.model || 'claude-3-5-sonnet-20241022',
+          messages: otherMessages,
+          max_tokens: payload.max_tokens || 2048,
+          stream: true
+        };
+        if (systemMessage) {
+          anthropicBody.system = systemMessage.content;
+        }
+        finalBody = JSON.stringify(anthropicBody);
       } else {
         if (settings.apiKey) {
           finalHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
@@ -813,6 +834,8 @@ async function handleSendMessage(e) {
               content = data.choices[0].delta.content || '';
             } else if (data.candidates?.[0]?.content?.parts?.[0]?.text !== undefined) {
               content = data.candidates[0].content.parts[0].text || '';
+            } else if (data.delta?.text !== undefined) {
+              content = data.delta.text || '';
             }
             if (content) {
               fullResponseText += content;
