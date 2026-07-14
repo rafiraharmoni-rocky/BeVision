@@ -908,7 +908,7 @@ async function fetchAvailableModels() {
         }
       });
     } else {
-      response = await fetch(`/api/client-models?url=${encodeURIComponent(endpointUrl)}&key=${encodeURIComponent(apiKey)}`);
+      response = await fetch(`/api/models?url=${encodeURIComponent(endpointUrl)}&key=${encodeURIComponent(apiKey)}`);
     }
     
     if (!response.ok) {
