@@ -976,6 +976,16 @@ async function handleSendMessage(e) {
             } else if (data.delta?.text !== undefined) {
               content = data.delta.text || '';
             }
+            
+            if (data.candidates?.[0]?.finishReason && data.candidates[0].finishReason !== 'STOP') {
+              const reason = data.candidates[0].finishReason;
+              if (reason === 'SAFETY') {
+                content += `\n\n*(Dihentikan oleh AI: Konten diblokir oleh Filter Keamanan/Safety Filter)*`;
+              } else {
+                content += `\n\n*(Dihentikan oleh AI: ${reason})*`;
+              }
+            }
+            
             if (content) {
               fullResponseText += content;
               assistantMessage.content = fullResponseText;
@@ -990,6 +1000,12 @@ async function handleSendMessage(e) {
       }
     }
     
+    // Check if response is empty after stream finished
+    if (!fullResponseText.trim()) {
+      fullResponseText = `*⚠️ Tidak ada respon dari AI. Ini biasanya terjadi jika request disaring atau diblokir oleh Filter Keamanan (Safety/Moderation Filter) dari provider API Anda.*`;
+      assistantMessage.content = fullResponseText;
+    }
+
     // Re-run highlighting & syntax replacements just in case
     bubbleElement.innerHTML = renderMathAndMarkdown(fullResponseText);
     lucide.createIcons();
