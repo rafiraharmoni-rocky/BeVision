@@ -694,17 +694,31 @@ async function handleSendMessage(e) {
       payload.max_tokens = parseInt(settings.maxTokens);
     }
     
-    const response = await fetch('/api/proxy', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        url: settings.apiUrl + '/chat/completions',
-        key: settings.apiKey,
-        body: payload
-      })
-    });
+    let response;
+    const isLocalUrl = settings.apiUrl.includes('localhost') || settings.apiUrl.includes('127.0.0.1');
+
+    if (isLocalUrl) {
+      response = await fetch(settings.apiUrl + '/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${settings.apiKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+    } else {
+      response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: settings.apiUrl + '/chat/completions',
+          key: settings.apiKey,
+          body: payload
+        })
+      });
+    }
     
     removeTypingIndicator();
     
@@ -826,7 +840,19 @@ async function fetchAvailableModels() {
   
   try {
     const endpointUrl = apiUrl + '/models';
-    const response = await fetch(`/api/client-models?url=${encodeURIComponent(endpointUrl)}&key=${encodeURIComponent(apiKey)}`);
+    let response;
+    const isLocalUrl = endpointUrl.includes('localhost') || endpointUrl.includes('127.0.0.1');
+
+    if (isLocalUrl) {
+      response = await fetch(endpointUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        }
+      });
+    } else {
+      response = await fetch(`/api/client-models?url=${encodeURIComponent(endpointUrl)}&key=${encodeURIComponent(apiKey)}`);
+    }
     
     if (!response.ok) {
       const errorData = await response.json();
