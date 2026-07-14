@@ -742,6 +742,7 @@ window.removeDocAttachment = function(index) {
 // Send message trigger
 async function handleSendMessage(e) {
   if (e) e.preventDefault();
+  const fetchStartTime = Date.now();
   
   const activeChat = chats.find(c => c.id === activeChatId);
   if (!activeChat) return;
@@ -949,11 +950,17 @@ async function handleSendMessage(e) {
     };
     
     // Append blank bubble to DOM first
+    const fetchDuration = Date.now() - fetchStartTime;
+    const responseStatusText = `HTTP ${response.status} (${fetchDuration}ms)`;
+    
     const messageRow = document.createElement('div');
     messageRow.className = 'message-row assistant message-animated';
     messageRow.innerHTML = `
       <div class="message-bubble"></div>
-      <div class="message-meta"><span>BebaaVision</span></div>
+      <div class="message-meta">
+        <span>BebaaVision</span>
+        <span class="response-status-badge" style="margin-left: 8px; font-size: 9px; opacity: 0.6; font-family: var(--font-mono);">${responseStatusText}</span>
+      </div>
     `;
     messagesList.appendChild(messageRow);
     const bubbleElement = messageRow.querySelector('.message-bubble');
@@ -1016,7 +1023,12 @@ async function handleSendMessage(e) {
     
     // Check if response is empty after stream finished
     if (!fullResponseText.trim()) {
-      fullResponseText = `*⚠️ Tidak ada respon dari AI. Ini biasanya terjadi jika request disaring atau diblokir oleh Filter Keamanan (Safety/Moderation Filter) dari provider API Anda.*`;
+      const streamDuration = Date.now() - fetchStartTime;
+      if (streamDuration < 1500) {
+        fullResponseText = `*⚠️ Tidak ada respon dari AI (${streamDuration}ms).* Ini terdeteksi sebagai **Filter Keamanan Instan (Safety Filter)** oleh provider API Anda karena koneksi langsung ditutup tanpa mengirimkan konten.`;
+      } else {
+        fullResponseText = `*⚠️ Tidak ada respon dari AI (${streamDuration}ms).* Ini terdeteksi sebagai **Lag / Gangguan Koneksi** karena koneksi memakan waktu lama lalu berakhir kosong.`;
+      }
       assistantMessage.content = fullResponseText;
     }
 
@@ -1034,8 +1046,9 @@ async function handleSendMessage(e) {
     console.error('Send Error:', error);
     
     // Show error message bubble
-    let errorDetails = `⚠️ **Gagal mengirim pesan.**\n\nDetail Kesalahan: \`${error.message}\`\n\nSilakan periksa API Key, Base URL, dan koneksi internet Anda di menu Pengaturan.`;
-    if (error.message.includes('504') || error.message.includes('502') || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('failed')) {
+    const elapsed = Date.now() - fetchStartTime;
+    let errorDetails = `⚠️ **Gagal mengirim pesan.** (${elapsed}ms)\n\nDetail Kesalahan: \`${error.message}\`\n\nSilakan periksa API Key, Base URL, dan koneksi internet Anda di menu Pengaturan.`;
+    if (error.message.includes('504') || error.message.includes('502') || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('failed') || elapsed > 9500) {
       errorDetails += `\n\n💡 **Tips:** Terjadi batas waktu koneksi (timeout/fetch failed). Jika Anda menggunakan OpenRouter, Gemini, atau local 9Router, harap aktifkan/centang opsi **Bypass Proxy (Koneksi Langsung)** di menu Settings agar koneksi menjadi instan dan stabil.`;
     }
     const errorMsg = {
