@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -72,27 +71,6 @@ function convertOpenAiToGemini(body) {
 }
 
 app.use(cors());
-
-// Proxy 9Router requests to internal port 20128 (excluding static web client files)
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/proxy') || req.path.startsWith('/api/client-models')) {
-    return next();
-  }
-  
-  // List of Bebaa Vision frontend assets
-  const clientAssets = ['/', '/index.html', '/app.js', '/style.css', '/logo.svg'];
-  
-  if (clientAssets.includes(req.path)) {
-    return next();
-  }
-  
-  // Proxy everything else to 9Router
-  return createProxyMiddleware({ 
-    target: process.env.ROUTER_URL || 'http://127.0.0.1:20128', 
-    changeOrigin: true 
-  })(req, res, next);
-});
-
 app.use(express.json({ limit: '50mb' })); // Support large image payloads
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -229,7 +207,7 @@ app.post('/api/proxy', async (req, res) => {
   }
 });
 
-app.get('/api/client-models', async (req, res) => {
+app.get('/api/models', async (req, res) => {
   const { url, key } = req.query;
 
   if (!url || !key) {
