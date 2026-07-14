@@ -855,15 +855,17 @@ async function fetchAvailableModels() {
     }
     
     if (!response.ok) {
-      const errorData = await response.json();
       let errorMsg = `HTTP ${response.status}`;
-      if (errorData.details) {
+      try {
+        const errorText = await response.text();
         try {
-          const parsedDetails = JSON.parse(errorData.details);
-          errorMsg = parsedDetails.error?.message || errorData.details;
+          const errorData = JSON.parse(errorText);
+          errorMsg = errorData.error?.message || errorData.details || errorData.error || errorText;
         } catch (e) {
-          errorMsg = errorData.details;
+          errorMsg = errorText || errorMsg;
         }
+      } catch (e) {
+        // Fallback
       }
       throw new Error(errorMsg);
     }
