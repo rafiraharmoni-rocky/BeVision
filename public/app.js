@@ -700,11 +700,9 @@ async function handleSendMessage(e) {
     const isGemini = settings.apiUrl.includes('generativelanguage.googleapis.com');
     const isAnthropic = settings.apiUrl.includes('api.anthropic.com');
     if (!isGemini && !isAnthropic) {
-      const hasPath = settings.apiUrl.includes('/chat/completions') || 
-                      settings.apiUrl.includes('/generateContent') || 
-                      settings.apiUrl.includes('/v1/chat') || 
-                      settings.apiUrl.split('/').slice(3).filter(Boolean).length > 0;
-      if (!hasPath) {
+      const endsWithCompletions = settings.apiUrl.includes('/chat/completions') || 
+                                  settings.apiUrl.includes('/chat/completions/');
+      if (!endsWithCompletions) {
         targetUrl = settings.apiUrl.endsWith('/') ? settings.apiUrl + 'chat/completions' : settings.apiUrl + '/chat/completions';
       }
     }
