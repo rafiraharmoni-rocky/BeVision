@@ -74,7 +74,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Support large image payloads
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.post('/api/proxy', async (req, res) => {
+app.post(['/api/proxy', '/proxy'], async (req, res) => {
   const { url, key, body } = req.body;
 
   if (!url || !key || !body) {
@@ -207,7 +207,7 @@ app.post('/api/proxy', async (req, res) => {
   }
 });
 
-app.get('/api/models', async (req, res) => {
+app.get(['/api/models', '/models'], async (req, res) => {
   const { url, key } = req.query;
 
   if (!url || !key) {
