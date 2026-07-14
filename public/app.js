@@ -696,17 +696,44 @@ async function handleSendMessage(e) {
       payload.max_tokens = parseInt(settings.maxTokens);
     }
     
+    let targetUrl = settings.apiUrl;
+    const isGemini = settings.apiUrl.includes('generativelanguage.googleapis.com');
+    if (!isGemini) {
+      const hasPath = settings.apiUrl.includes('/chat/completions') || 
+                      settings.apiUrl.includes('/generateContent') || 
+                      settings.apiUrl.includes('/v1/chat') || 
+                      settings.apiUrl.split('/').slice(3).filter(Boolean).length > 0;
+      if (!hasPath) {
+        targetUrl = settings.apiUrl.endsWith('/') ? settings.apiUrl + 'chat/completions' : settings.apiUrl + '/chat/completions';
+      }
+    }
+
     let response;
     const isLocalUrl = settings.apiUrl.includes('localhost') || settings.apiUrl.includes('127.0.0.1');
 
     if (settings.directConn || isLocalUrl) {
-      response = await fetch(settings.apiUrl + '/chat/completions', {
+      let finalHeaders = {
+        'Content-Type': 'application/json'
+      };
+      let finalBody = JSON.stringify(payload);
+
+      if (isGemini) {
+        let model = payload.model || 'gemini-1.5-flash';
+        if (!model.startsWith('models/')) {
+          model = `models/${model}`;
+        }
+        targetUrl = `https://generativelanguage.googleapis.com/v1beta/${model}:streamGenerateContent?key=${settings.apiKey}&alt=sse`;
+        finalBody = JSON.stringify(convertOpenAiToGemini(payload));
+      } else {
+        if (settings.apiKey) {
+          finalHeaders['Authorization'] = `Bearer ${settings.apiKey}`;
+        }
+      }
+
+      response = await fetch(targetUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey}`
-        },
-        body: JSON.stringify(payload)
+        headers: finalHeaders,
+        body: finalBody
       });
     } else {
       response = await fetch('/api/proxy', {
@@ -715,7 +742,7 @@ async function handleSendMessage(e) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          url: settings.apiUrl + '/chat/completions',
+          url: targetUrl,
           key: settings.apiKey,
           body: payload
         })
@@ -781,7 +808,12 @@ async function handleSendMessage(e) {
           const jsonStr = cleanLine.slice(6);
           try {
             const data = JSON.parse(jsonStr);
-            const content = data.choices?.[0]?.delta?.content || '';
+            let content = '';
+            if (data.choices?.[0]?.delta?.content !== undefined) {
+              content = data.choices[0].delta.content || '';
+            } else if (data.candidates?.[0]?.content?.parts?.[0]?.text !== undefined) {
+              content = data.candidates[0].content.parts[0].text || '';
+            }
             if (content) {
               fullResponseText += content;
               assistantMessage.content = fullResponseText;
@@ -1071,3 +1103,68 @@ function setupEventListeners() {
 
 // Start the APP!
 window.onload = init;
+
+// Helper to convert OpenAI messages format to Gemini Native format
+function convertOpenAiToGemini(body) {
+  const systemMessages = (body.messages || []).filter(m => m.role === 'system');
+  const otherMessages = (body.messages || []).filter(m => m.role !== 'system');
+
+  const systemInstruction = systemMessages.length > 0 ? {
+    parts: [{ text: systemMessages.map(m => m.content).join('\n') }]
+  } : undefined;
+
+  const contents = otherMessages.map(m => {
+    let role = m.role === 'assistant' ? 'model' : 'user';
+    let parts = [];
+    if (typeof m.content === 'string') {
+      parts = [{ text: m.content }];
+    } else if (Array.isArray(m.content)) {
+      parts = m.content.map(part => {
+        if (part.type === 'text') {
+          return { text: part.text };
+        } else if (part.type === 'image_url') {
+          const dataUrl = part.image_url.url;
+          const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            return {
+              inlineData: {
+                mimeType: matches[1],
+                data: matches[2]
+              }
+            };
+          }
+        }
+        return null;
+      }).filter(Boolean);
+    }
+    return { role, parts };
+  });
+
+  const geminiPayload = {
+    contents,
+    safetySettings: [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" }
+    ]
+  };
+
+  if (systemInstruction) {
+    geminiPayload.systemInstruction = systemInstruction;
+  }
+
+  const generationConfig = {};
+  if (body.temperature !== undefined) {
+    generationConfig.temperature = body.temperature;
+  }
+  if (body.max_tokens !== undefined) {
+    generationConfig.maxOutputTokens = body.max_tokens;
+  }
+  if (Object.keys(generationConfig).length > 0) {
+    geminiPayload.generationConfig = generationConfig;
+  }
+
+  return geminiPayload;
+}
