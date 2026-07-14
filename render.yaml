@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: bebaavision-web-client
+    env: node
+    buildCommand: npm install
+    startCommand: sh start.sh
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: DATA_DIR
+        value: ./data
+      - key: INITIAL_PASSWORD
+        value: admin123
+      - key: JWT_SECRET
+        value: 9router-secret-key-12345

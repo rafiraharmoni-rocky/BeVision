@@ -1,0 +1,8 @@
+node_modules/
+data/runtime/
+.env
+data/bin/
+data/auth/
+data/mitm/
+data/db/*.sqlite-shm
+data/db/*.sqlite-wal
