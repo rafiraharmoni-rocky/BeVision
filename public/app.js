@@ -533,12 +533,24 @@ function appendMessageDOM(role, content) {
     <div class="message-bubble">
       ${bubbleContentHtml}
     </div>
+    ${role === 'assistant' ? `
+    <div class="message-actions" style="display: flex; gap: 8px; margin-top: 4px; margin-left: 12px; font-size: 11px;">
+      <button type="button" class="btn-text btn-small" onclick="copyMessageText(this)" style="padding: 2px 6px; display: flex; align-items: center; gap: 4px; color: var(--text-secondary); background: transparent; border: none; cursor: pointer;">
+        <i data-lucide="copy" style="width: 12px; height: 12px;"></i> Salin
+      </button>
+      <button type="button" class="btn-text btn-small" onclick="exportMessageWord(this)" style="padding: 2px 6px; display: flex; align-items: center; gap: 4px; color: var(--text-secondary); background: transparent; border: none; cursor: pointer;">
+        <i data-lucide="file-text" style="width: 12px; height: 12px;"></i> Word
+      </button>
+    </div>` : ''}
     <div class="message-meta">
       <span>${role === 'user' ? 'Anda' : 'BebaaVision'}</span>
     </div>
   `;
   
   messagesList.appendChild(messageRow);
+  if (role === 'assistant') {
+    addTableExportButtons(messageRow);
+  }
   lucide.createIcons();
 }
 
@@ -1340,3 +1352,123 @@ function convertOpenAiToGemini(body) {
 
   return geminiPayload;
 }
+
+// Automatically scan and add float Excel/CSV export button to Markdown Tables
+function addTableExportButtons(bubbleElement) {
+  const tables = bubbleElement.querySelectorAll('table');
+  tables.forEach((table, index) => {
+    if (table.parentElement.classList.contains('table-wrapper')) return;
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    wrapper.style.position = 'relative';
+    wrapper.style.margin = '12px 0';
+    wrapper.style.border = '1px solid var(--border-color)';
+    wrapper.style.borderRadius = '8px';
+    wrapper.style.overflow = 'auto';
+    wrapper.style.padding = '36px 12px 12px 12px';
+    wrapper.style.backgroundColor = 'var(--bg-secondary)';
+    
+    table.parentNode.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+    
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary';
+    btn.style.position = 'absolute';
+    btn.style.top = '6px';
+    btn.style.right = '6px';
+    btn.style.fontSize = '10px';
+    btn.style.padding = '4px 8px';
+    btn.style.zIndex = '10';
+    btn.style.display = 'flex';
+    btn.style.alignItems = 'center';
+    btn.style.gap = '4px';
+    btn.style.backgroundColor = 'var(--bg-primary)';
+    btn.style.border = '1px solid var(--border-color)';
+    btn.style.color = 'var(--text-primary)';
+    btn.style.cursor = 'pointer';
+    btn.style.borderRadius = '4px';
+    btn.innerHTML = `<i data-lucide="download" style="width: 12px; height: 12px;"></i> Excel/CSV`;
+    
+    btn.onclick = () => {
+      exportTableToCSV(table, `tabel_${index + 1}_${Date.now()}.csv`);
+    };
+    
+    wrapper.appendChild(btn);
+  });
+}
+
+// Extract table content to CSV format with Excel compatibility (UTF-8 BOM)
+function exportTableToCSV(table, filename) {
+  const rows = table.querySelectorAll('tr');
+  let csvContent = '';
+  
+  rows.forEach(row => {
+    const cols = row.querySelectorAll('th, td');
+    const rowData = [];
+    cols.forEach(col => {
+      let text = col.innerText.trim();
+      text = text.replace(/"/g, '""');
+      rowData.push(`"${text}"`);
+    });
+    csvContent += rowData.join(',') + '\r\n';
+  });
+  
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Copy assistant bubble text content to clipboard
+window.copyMessageText = function(btnElement) {
+  const bubble = btnElement.closest('.message-row').querySelector('.message-bubble');
+  const text = bubble.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const originalHTML = btnElement.innerHTML;
+    btnElement.innerHTML = `<i data-lucide="check" style="width: 12px; height: 12px;"></i> Tersalin`;
+    lucide.createIcons();
+    setTimeout(() => {
+      btnElement.innerHTML = originalHTML;
+      lucide.createIcons();
+    }, 2000);
+  });
+};
+
+// Export assistant bubble content to MS Word compatible document (.doc)
+window.exportMessageWord = function(btnElement) {
+  const bubble = btnElement.closest('.message-row').querySelector('.message-bubble');
+  const htmlContent = bubble.innerHTML;
+  
+  const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+  <head>
+    <title>Export Doc</title>
+    <style>
+      body { font-family: 'Arial', sans-serif; font-size: 11pt; line-height: 1.5; color: #333333; }
+      h1, h2, h3, h4 { color: #1a1a1a; margin-top: 12pt; margin-bottom: 6pt; }
+      h1 { font-size: 18pt; }
+      h2 { font-size: 14pt; }
+      table { border-collapse: collapse; width: 100%; margin: 12pt 0; }
+      th, td { border: 1px solid #cccccc; padding: 6pt; text-align: left; }
+      th { background-color: #f2f2f2; font-weight: bold; }
+      pre { background-color: #f5f5f5; border: 1px solid #e5e5e5; padding: 8pt; font-family: 'Courier New', Courier, monospace; }
+      code { font-family: 'Courier New', Courier, monospace; background-color: #f5f5f5; }
+    </style>
+  </head>
+  <body>
+    ${htmlContent}
+  </body>
+  </html>`;
+  
+  const blob = new Blob(['\ufeff' + header], { type: 'application/msword' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', `dokumen_ai_${Date.now()}.doc`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
