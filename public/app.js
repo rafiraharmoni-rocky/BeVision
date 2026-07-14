@@ -8,7 +8,8 @@ let settings = {
   model: 'gpt-4o',
   systemPrompt: 'Anda adalah AI asisten yang sangat cerdas, membantu, dan detail.',
   temperature: 0.7,
-  maxTokens: 2048
+  maxTokens: 2048,
+  directConn: false
 };
 
 // DOM Elements
@@ -265,6 +266,7 @@ function updateStatusDisplays() {
   // Populate settings fields
   document.getElementById('settings-api-url').value = settings.apiUrl;
   document.getElementById('settings-api-key').value = settings.apiKey;
+  document.getElementById('settings-direct-conn').checked = !!settings.directConn;
   
   // Sync text input
   settingsModelInput.value = settings.model;
@@ -697,7 +699,7 @@ async function handleSendMessage(e) {
     let response;
     const isLocalUrl = settings.apiUrl.includes('localhost') || settings.apiUrl.includes('127.0.0.1');
 
-    if (isLocalUrl) {
+    if (settings.directConn || isLocalUrl) {
       response = await fetch(settings.apiUrl + '/chat/completions', {
         method: 'POST',
         headers: {
@@ -843,7 +845,7 @@ async function fetchAvailableModels() {
     let response;
     const isLocalUrl = endpointUrl.includes('localhost') || endpointUrl.includes('127.0.0.1');
 
-    if (isLocalUrl) {
+    if (settings.directConn || isLocalUrl) {
       response = await fetch(endpointUrl, {
         method: 'GET',
         headers: {
@@ -946,6 +948,7 @@ function setupEventListeners() {
   settingsSaveBtn.addEventListener('click', () => {
     const apiUrl = document.getElementById('settings-api-url').value.trim();
     const apiKey = document.getElementById('settings-api-key').value.trim();
+    const directConn = document.getElementById('settings-direct-conn').checked;
     
     // Read model from dropdown if visible, else from text input
     const model = (settingsModelSelect.style.display !== 'none' && settingsModelSelect.value) 
@@ -964,6 +967,7 @@ function setupEventListeners() {
     saveSettings({
       apiUrl,
       apiKey,
+      directConn,
       model: model || 'gpt-4o',
       systemPrompt,
       temperature,
